@@ -11,10 +11,9 @@ st.caption(
     "বিশ্বের যেকোনো ভাষায় প্রশ্ন করুন, টেক্সট এবং ছবির মাধ্যমে উত্তর পান!"
 )
 
-# ১. API Key রিভ্রিভ করার লজিক (Secrets অথবা Sidebar)
+# API Key রিভ্রিভ করার লজিক
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 
-# Secrets-এ Key না থাকলে সাইডবারে ইনপুট বক্স দেখাবে
 if not api_key:
     api_key = st.sidebar.text_input("Enter your Gemini API Key:", type="password")
 
@@ -22,8 +21,8 @@ if api_key:
     try:
         genai.configure(api_key=api_key)
 
-        # ২. মডেল নির্বাচন (gemini-2.5-flash ব্যবহার করা নিরাপদ ও দ্রুত)
-       model = genai.GenerativeModel("gemini-1.5-flash")
+        # মডেল নির্বাচন
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
         # চ্যাট হিস্ট্রি ইনিশিয়ালাইজেশন
         if "messages" not in st.session_state:
@@ -34,7 +33,7 @@ if api_key:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # ইমেজ আপলোড অপশন (উপরে রাখা যাতে ব্যবহারকারীর সুবিধা হয়)
+        # ইমেজ আপলোড অপশন
         uploaded_file = st.file_uploader(
             "Upload an image (optional)", type=["jpg", "png", "jpeg"]
         )
@@ -45,14 +44,12 @@ if api_key:
         )
 
         if user_input:
-            # ইউজার মেসেজ দেখান
             st.session_state.messages.append(
                 {"role": "user", "content": user_input}
             )
             with st.chat_message("user"):
                 st.markdown(user_input)
 
-            # সিস্টেম প্রম্পট
             system_instruction = (
                 "You are a helpful universal AI assistant. Always respond in the exact same language "
                 "the user used to ask the question. Provide clear and informative answers."
