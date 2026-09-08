@@ -85,7 +85,7 @@ if user_input:
         with st.spinner("AI চিন্তা করছে..."):
             try:
                 # অফিশিয়াল স্ট্যাবল মডেল
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-3.6-flash") 
 
                 if uploaded_image:
                     img = Image.open(uploaded_image)
