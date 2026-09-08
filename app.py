@@ -22,7 +22,7 @@ if api_key:
         genai.configure(api_key=api_key)
 
         # মডেল নির্বাচন
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3.6-flash")
 
         # চ্যাট হিস্ট্রি ইনিশিয়ালাইজেশন
         if "messages" not in st.session_state:
