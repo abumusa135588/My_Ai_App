@@ -1,82 +1,119 @@
 import os
-import google.generativeai as genai
+import io
 import streamlit as st
+import google.generativeai as genai
 from PIL import Image
+from gtts import gTTS
+import PyPDF2
 
-# Streamlit পেইজ কনফিগারেশন
-st.set_page_config(page_title="Universal Multilingual AI App", layout="wide")
-
-st.title("🌐 Universal Multilingual & Visual AI Assistant")
-st.caption(
-    "বিশ্বের যেকোনো ভাষায় প্রশ্ন করুন, টেক্সট এবং ছবির মাধ্যমে উত্তর পান!"
+# ১. পেজ কনফিগারেশন
+st.set_page_config(
+    page_title="Universal AI Assistant",
+    page_icon="🤖",
+    layout="wide"
 )
 
-# API Key রিভ্রিভ করার লজিক
+st.title("🤖 Universal AI Assistant")
+st.caption("কথা বলুন, ফাইল ও ছবি আপলোড করুন এবং যেকোনো ভাষায় দ্রুত উত্তর পান!")
+
+# ২. API Key লোড করা (Secrets অথবা Sidebar)
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 if not api_key:
-    api_key = st.sidebar.text_input("Enter your Gemini API Key:", type="password")
+    api_key = st.sidebar.text_input("🔑 Enter your Gemini API Key:", type="password")
 
-if api_key:
-    try:
-        genai.configure(api_key=api_key)
+if not api_key:
+    st.warning("অনুগ্রহ করে আপনার Gemini API Key-টি সাইডবারে দিন বা Streamlit Secrets-এ সেভ করুন।")
+    st.stop()
 
-        # মডেল নির্বাচন
-        model = genai.GenerativeModel("gemini-3.6-flash")
+# API কনফিগারেশন
+genai.configure(api_key=api_key)
 
-        # চ্যাট হিস্ট্রি ইনিশিয়ালাইজেশন
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
+# ৩. সাইডবার সেটিংস ও শেয়ার অপশন (Share Application)
+st.sidebar.header("⚙️ Settings & Share")
+enable_voice = st.sidebar.checkbox("🔊 Enable Voice Output (TTS)", value=True)
+clear_chat = st.sidebar.button("🗑️ Clear Chat History")
 
-        # পূর্বের মেসেজগুলো প্রদর্শন
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔗 Share App")
+# অ্যাপ শেয়ারের জন্য ডাইরেক্ট লিংক বা বাটন
+st.sidebar.info("আপনার বন্ধুদের সাথে অ্যাপটি শেয়ার করতে নিচের লিংকটি কপি করুন:")
+st.sidebar.code(st.sidebar.text_input("App URL", "https://share.streamlit.io", disabled=True), language="text")
 
-        # ইমেজ আপলোড অপশন
-        uploaded_file = st.file_uploader(
-            "Upload an image (optional)", type=["jpg", "png", "jpeg"]
-        )
+# ৪. চ্যাট হিস্ট্রি ব্যবস্থাপনা
+if "messages" not in st.session_state or clear_chat:
+    st.session_state.messages = []
 
-        # ইউজার ইনপুট
-        user_input = st.chat_input(
-            "Ask anything in any language... (যেকোনো ভাষায় প্রশ্ন করুন)"
-        )
+# পূর্বের চ্যাট দেখানো (ChatGPT / Gemini Style UI)
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        if "audio" in message and enable_voice:
+            st.audio(message["audio"], format="audio/mp3")
 
-        if user_input:
-            st.session_state.messages.append(
-                {"role": "user", "content": user_input}
-            )
-            with st.chat_message("user"):
-                st.markdown(user_input)
+# ৫. মাল্টিমিডিয়া ও ফাইল ইনপুট
+with st.expander("📎 Attach Image or PDF Document (Optional)"):
+    uploaded_image = st.file_uploader("Upload Image (JPG, PNG)", type=["jpg", "png", "jpeg"], key="img")
+    uploaded_pdf = st.file_uploader("Upload PDF Document", type=["pdf"], key="pdf")
 
-            system_instruction = (
-                "You are a helpful universal AI assistant. Always respond in the exact same language "
-                "the user used to ask the question. Provide clear and informative answers."
-            )
+# ৬. ইউজার ইনপুট গ্রহণ
+user_input = st.chat_input("Ask anything... (যেকোনো কিছু জিজ্ঞাসা করুন)")
 
-            prompt = f"{system_instruction}\n\nUser Question: {user_input}"
+if user_input:
+    # পিডিএফ ফাইল থেকে টেক্সট পড়া
+    pdf_text = ""
+    if uploaded_pdf:
+        try:
+            reader = PyPDF2.PdfReader(uploaded_pdf)
+            for page in reader.pages:
+                pdf_text += page.extract_text() or ""
+            pdf_text = f"\n\n[Attached PDF Content]:\n{pdf_text[:3000]}"
+        except Exception as e:
+            st.error(f"PDF পড়তে সমস্যা হয়েছে: {str(e)}")
 
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
+    full_prompt = user_input + pdf_text
+
+    # ইউজার মেসেজ চ্যাটে দেখানো
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+        if uploaded_image:
+            st.image(uploaded_image, caption="Uploaded Image", width=250)
+
+    # ৭. AI মডেল কল ও উত্তর জেনারেট
+    with st.chat_message("assistant"):
+        with st.spinner("AI চিন্তা করছে..."):
+            try:
+                # অফিশিয়াল স্ট্যাবল মডেল
+                model = genai.GenerativeModel("gemini-1.5-flash")
+
+                if uploaded_image:
+                    img = Image.open(uploaded_image)
+                    response = model.generate_content([full_prompt, img])
+                else:
+                    response = model.generate_content(full_prompt)
+
+                bot_reply = response.text
+                st.markdown(bot_reply)
+
+                # ৮. ভয়েস রেসপন্স (Text-to-Speech)
+                audio_bytes = None
+                if enable_voice:
                     try:
-                        if uploaded_file:
-                            image = Image.open(uploaded_file)
-                            response = model.generate_content([prompt, image])
-                        else:
-                            response = model.generate_content(prompt)
+                        tts = gTTS(text=bot_reply[:500], lang='bn' if any(ch in bot_reply for ch in 'অআইঈউঊএঐওঔকখগঘ') else 'en')
+                        audio_fp = io.BytesIO()
+                        tts.write_to_fp(audio_fp)
+                        audio_fp.seek(0)
+                        audio_bytes = audio_fp.read()
+                        st.audio(audio_bytes, format="audio/mp3")
+                    except Exception:
+                        pass
 
-                        st.markdown(response.text)
-                        st.session_state.messages.append(
-                            {"role": "assistant", "content": response.text}
-                        )
-                    except Exception as e:
-                        st.error(f"Error generating response: {str(e)}")
+                # হিস্ট্রিতে সেভ
+                msg_data = {"role": "assistant", "content": bot_reply}
+                if audio_bytes:
+                    msg_data["audio"] = audio_bytes
+                st.session_state.messages.append(msg_data)
 
-    except Exception as e:
-        st.error(f"API Key Error: {str(e)}")
-
-else:
-    st.warning(
-        "Please add your GEMINI_API_KEY in Streamlit Secrets or enter it in the sidebar."
-    )
+            except Exception as e:
+                st.error(f"ত্রুটি ঘটেছে: {str(e)}")
